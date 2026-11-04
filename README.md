@@ -102,7 +102,7 @@ How each requirement of the assignment brief can be verified.
 | Greenfield, brownfield, ambiguous | [Scenarios](docs/SCENARIOS.md). Brownfield proof: migrations V2–V4 are additive, V1 is untouched |
 | Workflow orchestration (the brief's critical differentiator) | [Orchestration](orchestration/README.md) and [Architecture §8](docs/ARCHITECTURE.md#8-delivery-orchestration): stage graph with parallel paths and joins, gates, approvals, retries, fallback, rollback, ledger. Check: `python3 orchestration/run.py plan` and `python3 -m unittest discover -s orchestration` |
 | Defensible decisions | [Decisions](docs/DECISIONS.md) D1–D10, each with the alternatives rejected |
-| AI traceability | [AI log](docs/AI-LOG.md): 16 entries. Entries 4, 7, 10, 14 and 15 show AI output rejected or corrected |
+| AI traceability | [AI log](docs/AI-LOG.md): 17 entries. Entries 4, 7, 10, 14 and 15 show AI output rejected or corrected |
 | Quality gates | `./gradlew build` runs Spotless, `-Xlint`, SpotBugs, tests and JaCoCo ≥ 80%; control-plane tests; CI in `.github/workflows` |
 | Testing | Unit tests + Testcontainers ITs on real PostgreSQL ([§3](docs/ENGINEERING-SUMMARY.md#3-testing-approach-and-validation)); `scripts/smoke-test.sh` on the running app |
 | Security | In Swagger: `POST` without a key → `401`; `http://169.254.169.254/` → `400`. Scopes → `403` in `ApiKeySecurityIT` |
