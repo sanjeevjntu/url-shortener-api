@@ -1,0 +1,9 @@
+# Developer-machine settings. Spring Boot reads ./config/application.yml from the WORKING DIRECTORY, so this file
+# applies whenever the app starts from a checkout: the IntelliJ run button, ./gradlew bootRun, java -jar from here.
+# It is not in the Docker image (the runtime stage copies only the extracted jar), so deployments are unaffected:
+# they still refuse to start without configured API key hashes.
+spring:
+  profiles:
+    # Used only when no profile is set explicitly. "local" gives a generated per-run API key (printed in the log)
+    # and loads the git-ignored config/application-local.yml if scripts/new-api-key.sh dev --local wrote one.
+    default: local

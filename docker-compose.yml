@@ -1,0 +1,44 @@
+# Reviewers / demo (Docker only): `docker compose --profile app up --build`
+# Local development:              `docker compose up -d postgres` then `./gradlew bootRun`
+# No Redis: the redirect cache and rate-limit buckets are in-process Caffeine (decision D2).
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: shortener
+      POSTGRES_USER: shortener
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-shortener} # dev default; never reuse outside local
+    ports:
+      - "127.0.0.1:5432:5432" # loopback only
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shortener -d shortener"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  app:
+    profiles: ["app"]
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: # optional stable key from scripts/new-api-key.sh dev --local (git-ignored)
+      - path: .env
+        required: false
+    environment:
+      # Demo profile: with no key configured, the app generates one for the run and prints it in the log:
+      #   docker compose logs app | grep X-API-Key
+      SPRING_PROFILES_ACTIVE: local
+      DB_URL: jdbc:postgresql://postgres:5432/shortener
+      DB_USER: shortener
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-shortener}
+      SHORTENER_BASE_URL: ${SHORTENER_BASE_URL:-http://localhost:8080}
+    ports:
+      - "8080:8080"
+      - "127.0.0.1:8081:8081" # actuator (health, metrics): loopback only
+    stop_grace_period: 30s # > spring.lifecycle.timeout-per-shutdown-phase, so queued clicks get flushed
+
+volumes:
+  pgdata:

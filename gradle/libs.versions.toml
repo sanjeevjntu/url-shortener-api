@@ -1,0 +1,36 @@
+[versions]
+springBoot = "4.1.0"          # pin to the latest 4.1.x patch when scaffolding on your machine
+spotless = "8.1.0"            # Gradle 9 compatible line
+palantirJavaFormat = "2.74.0" # first release line with Java 25 support
+spotbugsPlugin = "6.4.3"
+spotbugsTool = "4.9.8"        # GA builds run on JDK 25
+jacoco = "0.8.14"             # Java 25 class files
+bucket4j = "8.15.0"            # pure Java, no Spring coupling
+springdoc = "3.1.0"           # 3.x line is for Boot 4; 3.1.0 upgraded to Boot 4.1.0
+
+[libraries]
+# Dependency versions come from the Spring Boot BOM (Testcontainers 2.x, Flyway, pgjdbc, JUnit, ...).
+spring-boot-dependencies = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "springBoot" }
+spring-boot-starter-webmvc = { module = "org.springframework.boot:spring-boot-starter-webmvc" }
+spring-boot-starter-jdbc = { module = "org.springframework.boot:spring-boot-starter-jdbc" }
+spring-boot-starter-flyway = { module = "org.springframework.boot:spring-boot-starter-flyway" }
+spring-boot-starter-actuator = { module = "org.springframework.boot:spring-boot-starter-actuator" }
+spring-boot-starter-validation = { module = "org.springframework.boot:spring-boot-starter-validation" }
+caffeine = { module = "com.github.ben-manes.caffeine:caffeine" }
+bucket4j = { module = "com.bucket4j:bucket4j_jdk17-core", version.ref = "bucket4j" }
+micrometer-prometheus = { module = "io.micrometer:micrometer-registry-prometheus" }
+springdoc-webmvc-ui = { module = "org.springdoc:springdoc-openapi-starter-webmvc-ui", version.ref = "springdoc" }
+flyway-postgresql = { module = "org.flywaydb:flyway-database-postgresql" }
+postgresql = { module = "org.postgresql:postgresql" }
+
+spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-starter-test" }
+spring-boot-starter-webmvc-test = { module = "org.springframework.boot:spring-boot-starter-webmvc-test" } # Boot 4: MockMvc test support is its own module
+spring-boot-testcontainers = { module = "org.springframework.boot:spring-boot-testcontainers" }
+testcontainers-junit = { module = "org.testcontainers:testcontainers-junit-jupiter" }
+testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgresql" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+
+[plugins]
+spring-boot = { id = "org.springframework.boot", version.ref = "springBoot" }
+spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
+spotbugs = { id = "com.github.spotbugs", version.ref = "spotbugsPlugin" }

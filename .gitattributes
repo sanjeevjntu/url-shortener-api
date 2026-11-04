@@ -1,0 +1,5 @@
+# Line endings, as Gradle generates them: Unix scripts need LF, Windows batch files need CRLF.
+gradlew  text eol=lf
+*.sh     text eol=lf
+*.bat    text eol=crlf
+*.jar    binary

@@ -1,0 +1,9 @@
+.git
+.gradle
+build
+.idea
+docs
+*.md
+.backup
+.env
+config/application-local.yml

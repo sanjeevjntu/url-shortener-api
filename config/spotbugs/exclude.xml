@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Narrow, documented suppressions only. Every entry needs a reason (reviewed in PRs).
+
+  EI_EXPOSE_REP2 on Spring-wired classes: constructor-injected collaborators (JdbcClient, Clock, MeterRegistry,
+  ...) are singletons owned by the container, not mutable state leaking from callers. NOT suppressed for records
+  or value types, so byte[] exposure is still caught (which is why StoredKey/Cidr/IdempotencyContext are classes
+  that copy their arrays).
+-->
+<FindBugsFilter>
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+        <Class name="~.*\.(Jdbc\w*Repository|\w*Repository|\w*Service|\w*Controller|\w*Filter|\w*Config|\w*Properties|\w*Interceptor|\w*Recorder|\w*Cache|\w*Limiter|\w*Jobs|\w*Cleanup|\w*Handler)"/>
+    </Match>
+    <!--
+      Configuration-properties records (including nested ones such as ShortenerProperties$ApiKey) and the
+      ApiKeyRegistry$ApiClient value (no secrets) hold collections bound once
+      at startup and copied with List.copyOf (immutable). StatsResponse copies the same way. SpotBugs cannot always see
+      that a List.copyOf result is immutable, so both directions (EI_EXPOSE_REP, EI_EXPOSE_REP2) are suppressed for
+      these value types only.
+    -->
+    <Match>
+        <Or>
+            <Bug pattern="EI_EXPOSE_REP"/>
+            <Bug pattern="EI_EXPOSE_REP2"/>
+        </Or>
+        <Class name="~.*\.(ShortenerProperties(\$\w+)?|StatsResponse|ApiKeyRegistry\$ApiClient)"/>
+    </Match>
+    <!--
+      TraceIdFilter echoes an incoming X-Trace-Id into the response header only after it matched
+      [A-Za-z0-9-]{8,64}, so CR/LF header injection is impossible (and Tomcat also rejects CR/LF in headers).
+      SpotBugs cannot see the regex check in its data-flow analysis. Scoped to this class and this rule only.
+    -->
+    <Match>
+        <Bug pattern="HRS_REQUEST_PARAMETER_TO_HTTP_HEADER"/>
+        <Class name="com.example.shortener.common.web.TraceIdFilter"/>
+    </Match>
+</FindBugsFilter>

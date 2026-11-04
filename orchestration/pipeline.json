@@ -1,0 +1,211 @@
+{
+  "name": "url-shortener-api-delivery",
+  "description": "Stage graph for delivering the URL shortener API: dependencies, gates, human approvals, fallback and rollback. Read by orchestration/run.py.",
+  "policy": {
+    "max_retries": 2,
+    "max_workers": 3,
+    "stop_file": "orchestration/STOP",
+    "signoff_file": "docs/SIGNOFF.md",
+    "preflight": [
+      {"type": "file_hash", "name": "V1 migration is immutable (applied on engineer DB)", "path": "src/main/resources/db/migration/V1__links_and_idempotency.sql", "sha256": "b2ab3b6af30886cfc7b6c530706524c5df87c48eaf61257289a2394386529bd2"},
+      {"type": "file_hash", "name": "V2 migration is immutable", "path": "src/main/resources/db/migration/V2__click_analytics.sql", "sha256": "4c88e1d5298c8aa691447cc63c1ad7bdce5c443f82c60f75450da2db0a7c882d"},
+      {"type": "file_hash", "name": "V3 migration is immutable", "path": "src/main/resources/db/migration/V3__audit_and_tuning.sql", "sha256": "2012f7ebb654b4186eb269b46481f5aa792df9800aa17d5b4c505f6e5df9a0fa"},
+      {"type": "forbidden_text", "name": "no committed secrets or default keys",
+       "include": ["src/**", "config/**", "scripts/**", "load/**", ".github/**", "docker-compose.yml", "Dockerfile", "build.gradle.kts", "README.md"],
+       "patterns": ["dev-secret", "ghp_[A-Za-z0-9]{20,}", "github_pat_[A-Za-z0-9_]{20,}", "-----BEGIN [A-Z ]*PRIVATE KEY-----"]}
+    ]
+  },
+  "stages": [
+    {
+      "id": "requirements",
+      "title": "Requirements normalised, assumptions recorded",
+      "depends_on": [],
+      "autonomy": "agent",
+      "inputs": ["orchestration/requirements.md"],
+      "exit_gates": [
+        {"type": "file_contains", "name": "ten normalised requirements", "path": "orchestration/requirements.md", "pattern": "^\\| R10 \\|"},
+        {"type": "file_contains", "name": "assumptions section exists", "path": "docs/ARCHITECTURE.md", "pattern": "^## 1\\. Problem and assumptions"}
+      ],
+      "ai_log": [1, 2],
+      "decisions": []
+    },
+    {
+      "id": "design",
+      "title": "Architecture and decisions",
+      "depends_on": ["requirements"],
+      "autonomy": "agent",
+      "inputs": ["docs/DECISIONS.md"],
+      "exit_gates": [
+        {"type": "file_contains", "name": "decisions D1 to D9 recorded", "path": "docs/DECISIONS.md", "pattern": "^## D\\d+\\.", "min_count": 9},
+        {"type": "file_contains", "name": "failure modes documented", "path": "docs/ARCHITECTURE.md", "pattern": "^## 7\\. Failure modes"}
+      ],
+      "ai_log": [2],
+      "decisions": ["D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9"]
+    },
+    {
+      "id": "schema",
+      "title": "Schema and repository (Flyway V1-V4, plain JDBC)",
+      "depends_on": ["design"],
+      "autonomy": "agent+human",
+      "inputs": ["src/main/resources/db/migration/**", "src/main/java/com/example/shortener/link/*Repository.java", "src/main/java/com/example/shortener/link/Jdbc*.java", "src/test/java/com/example/shortener/link/JdbcLinkRepositoryIT.java"],
+      "entry_gates": [
+        {"type": "tool_available", "name": "Docker (Testcontainers needs it)", "tool": "docker"},
+        {"type": "file_exists", "name": "Gradle wrapper", "path": "gradlew"}
+      ],
+      "exit_gates": [
+        {"type": "command", "name": "repository tests on real PostgreSQL", "argv": ["./gradlew", "test", "--tests", "*JdbcLinkRepositoryIT"], "transient": true, "retries": 2, "exclusive": "gradle", "timeout": 900}
+      ],
+      "approvals": ["S1"],
+      "rollback": {"description": "Migrations are forward-only: write a corrective migration (next V number). Never edit an applied one."},
+      "ai_log": [3],
+      "decisions": ["D1", "D3"]
+    },
+    {
+      "id": "url-guard",
+      "title": "URL validation, host guard and code generator",
+      "depends_on": ["design"],
+      "autonomy": "agent+human",
+      "inputs": ["src/main/java/com/example/shortener/security/UrlValidator.java", "src/main/java/com/example/shortener/security/InvalidUrlException.java", "src/main/java/com/example/shortener/common/Base58.java", "src/main/java/com/example/shortener/common/ShortCodeGenerator.java", "src/test/java/com/example/shortener/security/UrlValidatorTest.java", "src/test/java/com/example/shortener/common/*Test.java"],
+      "entry_gates": [
+        {"type": "file_exists", "name": "Gradle wrapper", "path": "gradlew"}
+      ],
+      "exit_gates": [
+        {"type": "command", "name": "pure unit tests (validator, Base58, generator)", "argv": ["./gradlew", "test", "--tests", "*UrlValidatorTest", "--tests", "*Base58Test", "--tests", "*ShortCodeGeneratorTest"], "exclusive": "gradle", "timeout": 600}
+      ],
+      "approvals": ["S2"],
+      "rollback": {"description": "Restore the stage's code from the last green tag.", "argv": ["git", "restore", "--source=pipeline/last-green", "--", "src/main/java/com/example/shortener/common", "src/main/java/com/example/shortener/security/UrlValidator.java"]},
+      "ai_log": [5, 7],
+      "decisions": ["D3", "D5"]
+    },
+    {
+      "id": "api",
+      "title": "Create, get, delete, idempotency (join of schema and url-guard)",
+      "depends_on": ["schema", "url-guard"],
+      "autonomy": "agent",
+      "inputs": ["src/main/java/com/example/shortener/link/**", "src/main/java/com/example/shortener/common/error/**", "src/test/java/com/example/shortener/link/*Test.java", "src/test/java/com/example/shortener/LinkApiIT.java"],
+      "entry_gates": [
+        {"type": "tool_available", "name": "Docker (Testcontainers needs it)", "tool": "docker"}
+      ],
+      "exit_gates": [
+        {"type": "command", "name": "service tests and HTTP matrix on real PostgreSQL", "argv": ["./gradlew", "test", "--tests", "*LinkServiceTest", "--tests", "*LinkTest", "--tests", "*NewLinkTest", "--tests", "*LinkApiIT"], "transient": true, "retries": 2, "exclusive": "gradle", "timeout": 900}
+      ],
+      "rollback": {"description": "Restore the stage's code from the last green tag.", "argv": ["git", "restore", "--source=pipeline/last-green", "--", "src/main/java/com/example/shortener/link", "src/main/java/com/example/shortener/common/error"]},
+      "ai_log": [5, 13],
+      "decisions": ["D6", "D7"]
+    },
+    {
+      "id": "redirect",
+      "title": "Fast redirect with cache (parallel with analytics)",
+      "depends_on": ["api"],
+      "autonomy": "agent",
+      "inputs": ["src/main/java/com/example/shortener/redirect/**", "src/test/java/com/example/shortener/redirect/**", "src/test/java/com/example/shortener/RedirectResilienceIT.java"],
+      "entry_gates": [
+        {"type": "tool_available", "name": "Docker (Testcontainers needs it)", "tool": "docker"}
+      ],
+      "exit_gates": [
+        {"type": "command", "name": "cache single-flight and redirect resilience", "argv": ["./gradlew", "test", "--tests", "*LinkCacheTest", "--tests", "*RedirectResilienceIT"], "transient": true, "retries": 2, "exclusive": "gradle", "timeout": 900}
+      ],
+      "rollback": {"description": "Restore the stage's code from the last green tag.", "argv": ["git", "restore", "--source=pipeline/last-green", "--", "src/main/java/com/example/shortener/redirect"]},
+      "ai_log": [5],
+      "decisions": ["D2", "D4"]
+    },
+    {
+      "id": "analytics",
+      "title": "Click analytics off the critical path (parallel with redirect)",
+      "depends_on": ["api"],
+      "autonomy": "agent",
+      "inputs": ["src/main/java/com/example/shortener/analytics/**", "src/test/java/com/example/shortener/analytics/**", "src/main/resources/db/migration/V2__click_analytics.sql"],
+      "entry_gates": [
+        {"type": "file_exists", "name": "Gradle wrapper", "path": "gradlew"}
+      ],
+      "exit_gates": [
+        {"type": "command", "name": "async recorder, aggregator, event parsing", "argv": ["./gradlew", "test", "--tests", "*AsyncClickRecorderTest", "--tests", "*ClickAggregatorTest", "--tests", "*ClickEventTest"], "exclusive": "gradle", "timeout": 600}
+      ],
+      "fallback": {
+        "description": "Async path not shippable: release with shortener.analytics.mode=sync (decision D4 rollback switch) and verify the sync contract, which is what the integration tests exercise.",
+        "release_overrides": {"SHORTENER_ANALYTICS_MODE": "sync"},
+        "exit_gates": [
+          {"type": "command", "name": "sync-mode HTTP contract and redirect resilience", "argv": ["./gradlew", "test", "--tests", "*LinkApiIT", "--tests", "*RedirectResilienceIT"], "transient": true, "retries": 2, "exclusive": "gradle", "timeout": 900}
+        ]
+      },
+      "rollback": {"description": "Restore the stage's code from the last green tag.", "argv": ["git", "restore", "--source=pipeline/last-green", "--", "src/main/java/com/example/shortener/analytics"]},
+      "ai_log": [5],
+      "decisions": ["D4"]
+    },
+    {
+      "id": "hardening",
+      "title": "Security, rate limits and error model (join of redirect and analytics)",
+      "depends_on": ["redirect", "analytics"],
+      "autonomy": "agent+human",
+      "inputs": ["src/main/java/com/example/shortener/security/**", "src/main/java/com/example/shortener/config/**", "src/main/resources/application.yml", "config/application.yml", "src/test/java/com/example/shortener/security/**", "src/test/java/com/example/shortener/ApiKeySecurityIT.java", "src/test/java/com/example/shortener/RateLimitIT.java", "src/test/java/com/example/shortener/ErrorHandlingIT.java"],
+      "entry_gates": [
+        {"type": "tool_available", "name": "Docker (Testcontainers needs it)", "tool": "docker"}
+      ],
+      "exit_gates": [
+        {"type": "command", "name": "keys, scopes, rate limits, error model", "argv": ["./gradlew", "test", "--tests", "*ApiKeySecurityIT", "--tests", "*RateLimitIT", "--tests", "*ErrorHandlingIT", "--tests", "*ApiKeyRegistryTest", "--tests", "*RateLimiterTest", "--tests", "*ShortenerPropertiesTest"], "transient": true, "retries": 2, "exclusive": "gradle", "timeout": 900}
+      ],
+      "approvals": ["S3", "S4"],
+      "rollback": {"description": "Restore the stage's code and configuration from the last green tag.", "argv": ["git", "restore", "--source=pipeline/last-green", "--", "src/main/java/com/example/shortener/security", "src/main/java/com/example/shortener/config", "src/main/resources/application.yml", "config/application.yml"]},
+      "ai_log": [8, 10, 12, 13],
+      "decisions": ["D5", "D6", "D8"]
+    },
+    {
+      "id": "quality",
+      "title": "Quality gates: format, lint, SpotBugs, all tests, coverage",
+      "depends_on": ["hardening"],
+      "autonomy": "agent",
+      "inputs": ["build.gradle.kts", "gradle/libs.versions.toml", "config/spotbugs/exclude.xml", "src/**"],
+      "entry_gates": [
+        {"type": "tool_available", "name": "Docker (Testcontainers needs it)", "tool": "docker"}
+      ],
+      "exit_gates": [
+        {"type": "command", "name": "./gradlew build (Spotless, -Xlint, tests, SpotBugs, JaCoCo >= 80%)", "argv": ["./gradlew", "build"], "transient": true, "retries": 1, "exclusive": "gradle", "timeout": 1800}
+      ],
+      "ai_log": [9, 14],
+      "decisions": []
+    },
+    {
+      "id": "smoke",
+      "title": "End-to-end smoke test of the running service",
+      "depends_on": ["quality"],
+      "autonomy": "agent",
+      "inputs": ["scripts/smoke-test.sh", "Dockerfile", "docker-compose.yml"],
+      "entry_gates": [
+        {"type": "env_present", "name": "API key of the running instance (SMOKE_API_KEY)", "var": "SMOKE_API_KEY"},
+        {"type": "command", "name": "service is up (management port)", "argv": ["curl", "-sf", "http://localhost:8081/actuator/health"], "timeout": 15}
+      ],
+      "exit_gates": [
+        {"type": "command", "name": "smoke test: every endpoint, 0 failures", "argv": ["scripts/smoke-test.sh", "${SMOKE_API_KEY}"], "timeout": 180}
+      ],
+      "ai_log": [11],
+      "decisions": []
+    },
+    {
+      "id": "docs",
+      "title": "Documentation consistent and navigable (parallel with quality and smoke)",
+      "depends_on": ["hardening"],
+      "autonomy": "agent",
+      "inputs": ["README.md", "docs/ARCHITECTURE.md", "docs/SCENARIOS.md", "docs/ENGINEERING-SUMMARY.md", "docs/AI-LOG.md", "docs/SIGNOFF.md", "load/README.md", "orchestration/README.md"],
+      "exit_gates": [
+        {"type": "md_links", "name": "every relative link and #anchor resolves", "include": ["README.md", "docs/*.md", "load/README.md", "orchestration/*.md"]},
+        {"type": "file_contains", "name": "AI log has entry 14", "path": "docs/AI-LOG.md", "pattern": "^### 14\\. "}
+      ],
+      "ai_log": [12],
+      "decisions": []
+    },
+    {
+      "id": "release",
+      "title": "Release readiness (needs every human sign-off: S1-S4 upstream and S5)",
+      "depends_on": ["quality", "smoke", "docs"],
+      "autonomy": "agent+human",
+      "release_gate": true,
+      "inputs": ["docs/SIGNOFF.md"],
+      "exit_gates": [
+        {"type": "file_contains", "name": "sign-off table present", "path": "docs/SIGNOFF.md", "pattern": "^\\| S4 \\|"}
+      ],
+      "approvals": ["S5"],
+      "ai_log": [],
+      "decisions": []
+    }
+  ]
+}

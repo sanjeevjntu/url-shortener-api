@@ -1,0 +1,42 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  control-plane:
+    # The delivery pipeline's own tests, the stage graph and the ledger integrity: seconds, no Docker needed.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 -m unittest discover -s orchestration -v
+      - run: python3 orchestration/run.py plan
+      - run: python3 orchestration/run.py verify
+
+  build:
+    runs-on: ubuntu-latest # includes Docker, required by Testcontainers
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: gradle/actions/setup-gradle@v4
+      # build = spotlessCheck + compile + unit/integration tests + spotbugs + jacoco verification
+      - run: ./gradlew build
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reports
+          path: |
+            build/reports/
+            build/test-results/

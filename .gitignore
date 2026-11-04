@@ -1,0 +1,22 @@
+# Build
+build/
+.gradle/
+out/
+bin/
+# IDE / OS
+.idea/
+*.iml
+.vscode/
+.DS_Store
+# Secrets & local config (written by scripts/new-api-key.sh --local)
+.env
+config/application-local.yml
+*.pem
+# Logs
+*.log
+# Local backups made before automated refactors
+.backup/
+# Orchestration control plane
+__pycache__/
+*.pyc
+orchestration/STOP
