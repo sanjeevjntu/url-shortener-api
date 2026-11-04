@@ -46,8 +46,7 @@ Kafka/Redis/Resilience4j left about half the code). Each finding has a regressio
 **C. Analytics off the critical path (sync → async).** The baseline (`mode=sync`) writes inside the redirect, so a slow
 analytics write slows every redirect. Change: bounded queue, 1 s aggregated flush, drop-and-count, graceful drain; the
 property is the rollback switch (both modes shipped in one change, behind the flag). Validation: `RedirectResilienceIT`
-(storage failing → still `302`), `AsyncClickRecorderTest`, `ClickAggregatorTest` (1,000 clicks → 3 upserts); k6 sync vs
-async in `load/` (numbers by the engineer).
+(storage failing → still `302`), `AsyncClickRecorderTest`, `ClickAggregatorTest` (1,000 clicks → 3 upserts); k6 script for sync vs async in `load/` (written, **not run yet**: no performance numbers are claimed).
 
 **D. Refactor after review feedback.** The engineer judged parts over-engineered or not production-grade:
 

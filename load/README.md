@@ -21,12 +21,11 @@ k6 run -e API_KEY=<key> -e MODE=async -e RATE=500 load/redirect.js
 Run each mode twice and keep the second run (JIT warm). Compare `http_req_duration{kind:redirect}` p95/p99 and check
 <http://localhost:8081/actuator/metrics/shortener.analytics.dropped> (expected 0 at this rate).
 
-## Results (engineer to fill in; also quote them in docs/SCENARIOS.md, 2C)
+## Results: not run yet
 
-| Mode | Rate (rps) | p95 (ms) | p99 (ms) | Errors | Machine |
-|---|---|---|---|---|---|
-| sync | 500 | | | | |
-| async | 500 | | | | |
+The script and the procedure above are ready, but the test has **not been run**, so this project claims no performance
+numbers. The sync/async decision (D4) rests on the design and on the resilience tests (`RedirectResilienceIT`,
+`AsyncClickRecorderTest`), not on measured latency.
 
-One laptop, app and DB on the same machine, warm cache: the absolute numbers are not production numbers; the
-**difference between the modes** is what this test shows.
+When it is run, record p95/p99 and errors per mode here. One laptop with app and DB on the same machine gives no
+production numbers; the **difference between the modes** is what the test shows.

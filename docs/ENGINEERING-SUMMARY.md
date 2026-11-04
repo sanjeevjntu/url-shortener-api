@@ -15,7 +15,7 @@ High-impact tasks also need a human sign-off ([SIGNOFF](SIGNOFF.md)).
 | T4 | Code generator | T1 | Exact vectors; bijection; uniformity; forced collision → retry → `503` | Done |
 | T5 | Create/get/delete, idempotency, API key | T2, T3, T4 | `201/200/401/403/404/409/410` matrix; per-caller idempotency | Done |
 | T6 | Fast redirect | T5 | Cache hit/miss/negative; `302/404/410`; single-flight | Done |
-| T7/T9 | Analytics, then off the critical path | T5 | Clicks counted; redirect survives analytics failure; drops counted; flag rolls back | Done (k6: engineer) |
+| T7/T9 | Analytics, then off the critical path | T5 | Clicks counted; redirect survives analytics failure; drops counted; flag rolls back | Done (k6 script ready, not run) |
 | T8 | Abuse protection + contract | T6 | `429` + `Retry-After`; spoofed XFF ignored; uniform errors; OpenAPI | Done |
 | T10 | Ambiguous: expiry, private links | T6 | Decision with rejected alternatives; boundary tests | Done (private deferred) |
 | T11 | Review-driven refactor | T7/T9, T8, T10 | Aliases removed; Bucket4j; hashed mandatory keys; error model; docs consolidated | Done |
@@ -60,14 +60,14 @@ smoke test of a running instance → k6. No H2: the guarantees under test are Po
 | Tests + coverage | JUnit 5 + Testcontainers; JaCoCo ≥ 80% instructions |
 | End to end | `scripts/smoke-test.sh <key>`: 17 checks, non-zero exit on failure |
 | Security | CodeQL, dependency review on PRs, Dependabot alerts |
-| Performance | k6 at a fixed request rate ([load/README.md](../load/README.md)) |
+| Performance | k6 at a fixed request rate ([load/README.md](../load/README.md)); script ready, **not run yet** |
 | Delivery pipeline | `python3 orchestration/run.py plan` / `run`: gates, approvals, ledger; control-plane tests and ledger check in CI |
 | Human review | Sign-offs S1–S5 for schema, URL guard, security, rate limits and the pipeline policy |
 
 **What has actually run** (engineer's machine): T11 green with 124 tests; T12 137 tests; T14 148 tests, 0 failures,
 coverage 95.1% instructions / 80.8% branches. After the SpotBugs fixes (AI-LOG 14) and the rename (AI-LOG 16),
 `./gradlew spotlessApply build` passed in full (tests, SpotBugs, JaCoCo, Spotless), and `scripts/smoke-test.sh` passed
-against the running Docker Compose app. k6: pending (engineer).
+against the running Docker Compose app. k6: not run (script ready); no performance numbers are claimed.
 **Control plane (AI sandbox):** 65 unit tests pass (Python 3.13); the full lifecycle of the real stage graph was
 rehearsed with stubbed build tools (blocked on sign-off → signed → cached → re-planned after one edit). That rehearsal
 proves the scheduling, approval and re-plan logic, **not** that the real build passes. No real pipeline run exists yet,
@@ -106,6 +106,7 @@ analytics days are UTC; the service never fetches targets.
 - Keys identify integrations, not end users: no per-user ownership or private links.
 - No malware/phishing reputation check; hostnames resolving to private IPs are not blocked.
 - Analytics approximate under overload; up to 1 s of clicks lost on a crash.
+- No load-test results: the k6 script exists but has not been run, so latency under load is unmeasured.
 - Sync and async analytics shipped in one change behind a flag, not as baseline + refactor commits.
 - No architecture-rule tests (ArchUnit); package boundaries rely on review and event-based decoupling.
 - The control plane governs the AI's work but does not launch it; fingerprints are taken when a run starts (no mid-run
