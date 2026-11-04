@@ -7,7 +7,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
 @ConfigurationPropertiesScan
-@EnableScheduling // analytics flusher, expiry sweeper, idempotency-key cleanup
+@EnableScheduling // analytics flusher, idempotency-key cleanup
 public class ShortenerApplication {
 
     public static void main(String[] args) {
